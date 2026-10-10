@@ -21,20 +21,42 @@ It is designed to be lightweight, fast, and fully custom-tailored, giving player
 
 ### reviews
 
-<p>
-    <t>
-        <img src="[useless]/jefry_villager.jpg" height="95px">
-        "this server is great for me and my friend" - Jefry (5 Stars)
-    </t>
-</p>
-(Photo of Jefry)
+<table>
+  <tr>
+    <td width="120" align="left">
+      <img src="https://github.com/user-attachments/assets/ccd3d2f0-8d62-45f8-afa4-50aeb128c1b9" height="80px">
+    </td>
+    <td>
+      "this server is great for me and my friend"<br>
+      <b>- Jefry ⭐⭐⭐⭐⭐</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="left">
+      <img src="https://github.com/user-attachments/assets/ccd3d2f0-8d62-45f8-afa4-50aeb128c1b9" height="80px">
+    </td>
+    <td>
+      "I recommended this for y'all"<br>
+      <b>- Also Jefry ⭐⭐⭐⭐⭐</b>
+    </td>
+  </tr>
+  <tr>
+    <td align="left">
+      <img src="https://github.com/user-attachments/assets/866acd44-6dcc-4a59-8938-cfea69912df3" height="80px">
+    </td>
+    <td>
+      "i love playing this with my boyfriend"<br>
+      <b>- Jefry girlfriend ⭐⭐⭐⭐⭐</b>
+    </td>
+  </tr>
+   <tr>
+    <td align="left">
+      <img src="https://github.com/user-attachments/assets/65e15707-8556-4608-97f6-48d715bc6547" height="80px">
+    </td>
+    <td>
+      "my son always playing with his girlfriend (but i wanna play too with my son 😥)"<br>
+      <b>- Jefry Mom ⭐</b>
+    </td>
+  </tr>
+</table>
 
-
-
-<p>
-    <t>
-        <img src="[useless]/jefry_villager.jpg" height="95px">
-        "I recommended this for y'all" - Also Jefry (Also 5 Stars)
-    </t>
-</p>
-(Another photo of Jefry)
