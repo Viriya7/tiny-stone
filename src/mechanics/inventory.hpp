@@ -12,7 +12,6 @@ struct ItemStack {
 
 class PlayerInventory {
 public:
-    // Standar Minecraft 1.12.2 Inventory Slots (0 - 45)
     ItemStack slots[46];
 
     PlayerInventory() {
