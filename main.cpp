@@ -406,7 +406,7 @@ void handleClient(SOCKET client_socket) {
                         std::string chat_msg(cursor, msg_len);
                         cursor += msg_len;
                         MessageManager::broadcastChat(clients, session->username, chat_msg);
-                        log_msg("[Chat] 웃 " + session->username + " : " + chat_msg);
+                        log_msg("[Chat] " + session->username + " : " + chat_msg);
                     }
                 }
                 else if (pkt_id == 0x14) {
