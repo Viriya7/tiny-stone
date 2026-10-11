@@ -15,8 +15,12 @@ struct PlayerState {
     float food_exhaustion_level = 0.0f;
     int food_timer = 0;
     
+    float thirst = 100.0f;
+    int thirst_timer = 0;
+
     double x = 0.5, y = 64.0, z = 0.5;
     bool on_ground = true;
+    double highest_y = 64.0;
 };
 
 class SurvivalManager {
@@ -44,28 +48,56 @@ private:
 public:
     static void updateIndicators(SOCKET sock, PlayerState& player) {
         std::string payload = "";
-        
         uint32_t b_health; 
         std::memcpy(&b_health, &player.health, 4);
         for(int i = 3; i >= 0; i--) payload.push_back((b_health >> (i * 8)) & 0xFF);
-        
         appendVarInt(payload, player.food_level);
-        
         uint32_t b_sat; 
         std::memcpy(&b_sat, &player.food_saturation, 4);
         for(int i = 3; i >= 0; i--) payload.push_back((b_sat >> (i * 8)) & 0xFF);
-
         sendPacketRaw(sock, 0x41, payload);
+    }
+
+    static void updateThirstDisplay(SOCKET sock, PlayerState& player) {
+        int thirst_val = (int)player.thirst;
+        std::string json_text = "{\"text\":\"[ Thirst: " + std::to_string(thirst_val) + "% ]\",\"color\":\"aqua\"}";
+        
+        std::string payload = "";
+        appendVarInt(payload, json_text.length());
+        payload.append(json_text);
+        payload.push_back(0x02);
+
+        sendPacketRaw(sock, 0x0F, payload);
     }
 
     static void processMovement(SOCKET sock, PlayerState& player, double newX, double newY, double newZ, bool onGround) {
         double dx = newX - player.x;
         double dy = newY - player.y;
         double dz = newZ - player.z;
-        double distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+        double total_dist = std::sqrt(dx * dx + dy * dy + dz * dz);
 
-        if (distance > 0.01) {
-            player.food_exhaustion_level += 0.01f * (float)distance;
+        if (onGround) {
+            if (!player.on_ground) {
+                double fall_distance = player.highest_y - newY;
+                if (fall_distance > 3.0) {
+                    float damage = (float)(fall_distance - 3.0);
+                    player.health = std::max(0.0f, player.health - damage);
+                    updateIndicators(sock, player);
+                }
+                player.highest_y = newY;
+            } else {
+                player.highest_y = newY;
+            }
+        } else {
+            if (newY > player.highest_y) {
+                player.highest_y = newY;
+            }
+        }
+
+        if (total_dist > 0.01) {
+            float exhaustion_rate = 0.01f;
+            player.food_exhaustion_level += exhaustion_rate * (float)total_dist;
+            
             if (player.food_exhaustion_level >= 4.0f) {
                 player.food_exhaustion_level -= 4.0f;
                 if (player.food_saturation > 0.0f) {
@@ -87,12 +119,23 @@ public:
         player.food_timer++;
         if (player.food_timer >= 80) {
             player.food_timer = 0;
-            
             if (player.food_level >= 18 && player.health < 20.0f && player.health > 0.0f) {
                 player.health = std::min(20.0f, player.health + 1.0f);
                 updateIndicators(sock, player);
+            } else if (player.food_level == 0 && player.health > 1.0f) {
+                player.health -= 1.0f;
+                updateIndicators(sock, player);
             }
-            else if (player.food_level == 0 && player.health > 1.0f) {
+        }
+
+        player.thirst_timer++;
+        if (player.thirst_timer >= 1200) {
+            player.thirst_timer = 0;
+            if (player.thirst > 0.0f) {
+                player.thirst = std::max(0.0f, player.thirst - 2.0f);
+                updateThirstDisplay(sock, player);
+            }
+            if (player.thirst <= 0.0f && player.health > 1.0f) {
                 player.health -= 1.0f;
                 updateIndicators(sock, player);
             }

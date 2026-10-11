@@ -9,6 +9,8 @@
 #include <mutex>
 #include <memory>
 #include <sstream>
+#include <fstream>
+#include <filesystem>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
@@ -22,6 +24,7 @@
 #define PORT 25565
 #define BUFFER_SIZE 8192
 
+namespace fs = std::filesystem;
 std::atomic<bool> server_running(true);
 
 void log_msg(const std::string& message) {
@@ -73,6 +76,56 @@ void sendBlockChange(SOCKET sock, int x, int y, int z, int32_t block_state_id) {
     for(int i = 7; i >= 0; i--) payload.push_back((encoded_pos >> (i * 8)) & 0xFF);
     appendVarInt(payload, block_state_id);
     sendPacket(sock, 0x0B, payload);
+}
+
+void savePlayerData(const std::string& username, const PlayerState& player) {
+    std::string dir = "./player_data";
+    if (!fs::exists(dir)) fs::create_directories(dir);
+    std::string filepath = dir + "/" + username + ".dat";
+    std::ofstream file(filepath, std::ios::binary);
+    if (file) {
+        file.write(reinterpret_cast<const char*>(&player.x), sizeof(player.x));
+        file.write(reinterpret_cast<const char*>(&player.y), sizeof(player.y));
+        file.write(reinterpret_cast<const char*>(&player.z), sizeof(player.z));
+        file.write(reinterpret_cast<const char*>(&player.health), sizeof(player.health));
+        file.write(reinterpret_cast<const char*>(&player.food_level), sizeof(player.food_level));
+        file.write(reinterpret_cast<const char*>(&player.thirst), sizeof(player.thirst));
+    }
+}
+
+bool loadPlayerData(const std::string& username, PlayerState& player) {
+    std::string filepath = "./player_data/" + username + ".dat";
+    if (fs::exists(filepath)) {
+        std::ifstream file(filepath, std::ios::binary);
+        if (file) {
+            file.read(reinterpret_cast<char*>(&player.x), sizeof(player.x));
+            file.read(reinterpret_cast<char*>(&player.y), sizeof(player.y));
+            file.read(reinterpret_cast<char*>(&player.z), sizeof(player.z));
+            file.read(reinterpret_cast<char*>(&player.health), sizeof(player.health));
+            file.read(reinterpret_cast<char*>(&player.food_level), sizeof(player.food_level));
+            file.read(reinterpret_cast<char*>(&player.thirst), sizeof(player.thirst));
+            player.highest_y = player.y;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool loadPlayerData(const std::string& username, PlayerState& player) {
+    std::string filepath = "./player_data/" + username + ".dat";
+    if (fs::exists(filepath)) {
+        std::ifstream file(filepath, std::ios::binary);
+        if (file) {
+            file.read(reinterpret_cast<char*>(&player.x), sizeof(player.x));
+            file.read(reinterpret_cast<char*>(&player.y), sizeof(player.y));
+            file.read(reinterpret_cast<char*>(&player.z), sizeof(player.z));
+            file.read(reinterpret_cast<char*>(&player.health), sizeof(player.health));
+            file.read(reinterpret_cast<char*>(&player.food_level), sizeof(player.food_level));
+            player.highest_y = player.y;
+            return true;
+        }
+    }
+    return false;
 }
 
 struct ClientSession {
@@ -164,6 +217,9 @@ void serverTickLoop() {
         for (auto& client : clients) {
             if (!client->active || client->connection_state != 3) continue;
             SurvivalManager::tickSurvival(client->socket, client->player);
+            if (world_age % 20 == 0) {
+                SurvivalManager::updateThirstDisplay(client->socket, client->player);
+            }
             auto current_time = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(current_time - client->last_keep_alive).count();
             if (duration >= 5) {
@@ -226,8 +282,8 @@ void handleClient(SOCKET client_socket) {
                 if (pkt_id == 0x00) {
                     std::string json_resp = 
                         "{\"version\":{\"name\":\"1.12.2\",\"protocol\":340},"
-                        "\"players\":{\"max\":5,\"online\":1,\"sample\":[]},"
-                        "\"description\":{\"text\":\"Tiny-stone Server\"}}";
+                        "\"players\":{\"max\":10,\"online\":1,\"sample\":[]},"
+                        "\"description\":{\"text\":\"Tiny Stoneblock 1.12.2\"}}";
                     std::string payload = "";
                     appendVarInt(payload, json_resp.length());
                     payload.append(json_resp);
@@ -247,6 +303,16 @@ void handleClient(SOCKET client_socket) {
                     std::string pname(cursor, name_len);
                     session->username = pname;
                     log_msg("Player logging in: " + pname);
+
+                    if (!loadPlayerData(pname, session->player)) {
+                        session->player.x = 0.5;
+                        session->player.y = 64.0;
+                        session->player.z = 0.5;
+                        session->player.health = 20.0f;
+                        session->player.food_level = 20;
+                        session->player.thirst = 100.0f;
+                    }
+
                     std::string login_success = "";
                     std::string uuid_str = "00000000-0000-0000-0000-000000000000";
                     appendVarInt(login_success, uuid_str.length());
@@ -278,17 +344,20 @@ void handleClient(SOCKET client_socket) {
                     for(int i = 3; i >= 0; i--) abilities_payload.push_back((walk_spd >> (i * 8)) & 0xFF);
                     sendPacket(client_socket, 0x2C, abilities_payload);
                     std::string spawn_pos_payload = "";
-                    int64_t spawn_x = 0, spawn_y = 64, spawn_z = 0;
+                    int64_t spawn_x = (int64_t)session->player.x, spawn_y = (int64_t)session->player.y, spawn_z = (int64_t)session->player.z;
                     int64_t encoded_pos = ((spawn_x & 0x3FFFFFF) << 38) | ((spawn_y & 0xFFF) << 26) | (spawn_z & 0x3FFFFFF);
                     for(int i = 7; i >= 0; i--) spawn_pos_payload.push_back((encoded_pos >> (i * 8)) & 0xFF);
                     sendPacket(client_socket, 0x46, spawn_pos_payload);
                     log_msg("Sending spawn chunks...");
-                    for (int cx = -1; cx <= 1; cx++) {
-                        for (int cz = -1; cz <= 1; cz++) {
+                    int player_chunk_x = (int)session->player.x >> 4;
+                    int player_chunk_z = (int)session->player.z >> 4;
+                    for (int cx = player_chunk_x - 1; cx <= player_chunk_x + 1; cx++) {
+                        for (int cz = player_chunk_z - 1; cz <= player_chunk_z + 1; cz++) {
                             sendPacket(client_socket, 0x20, WorldGenerator::getOrGenerateChunk(cx, cz));
                         }
                     }
                     SurvivalManager::updateIndicators(client_socket, session->player);
+                    SurvivalManager::updateThirstDisplay(client_socket, session->player);
                     std::string pos = "";
                     auto push_double = [&](double val) {
                         uint64_t b; std::memcpy(&b, &val, 8);
@@ -298,15 +367,15 @@ void handleClient(SOCKET client_socket) {
                         uint32_t b; std::memcpy(&b, &val, 4);
                         for(int i = 3; i >= 0; i--) pos.push_back((b >> (i * 8)) & 0xFF);
                     };
-                    push_double(0.5);   
-                    push_double(64.0);  
-                    push_double(0.5);   
+                    push_double(session->player.x);   
+                    push_double(session->player.y);  
+                    push_double(session->player.z);   
                     push_float(0.0f);   
                     push_float(0.0f);   
                     pos.push_back(0x00); 
                     appendVarInt(pos, 123); 
                     sendPacket(client_socket, 0x2F, pos);
-                    log_msg("Player spawned successfully.");
+                    log_msg("Player spawned successfully at last position.");
                 }
             }
             else if (session->connection_state == 3) {
@@ -405,6 +474,11 @@ void handleClient(SOCKET client_socket) {
             cursor = packet_end;
         }
     }
+
+    if (!session->username.empty()) {
+        savePlayerData(session->username, session->player);
+    }
+
     closesocket(client_socket);
     {
         std::lock_guard<std::mutex> lock(clients_mutex);
