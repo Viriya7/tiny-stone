@@ -21,6 +21,7 @@ struct PlayerState {
     double x = 0.5, y = 64.0, z = 0.5;
     bool on_ground = true;
     double highest_y = 64.0;
+    bool boss_bar_initialized = false;
 };
 
 class SurvivalManager {
@@ -32,6 +33,13 @@ private:
             if (val != 0) temp |= 0b10000000;
             dest.push_back(temp);
         } while (val != 0);
+    }
+
+    static void appendFloat(std::string& dest, float val) {
+        const uint8_t* ptr = reinterpret_cast<const uint8_t*>(&val);
+        for (int i = 3; i >= 0; --i) {
+            dest.push_back(ptr[i]);
+        }
     }
 
     static void sendPacketRaw(SOCKET sock, int32_t packet_id, const std::string& data) {
@@ -59,15 +67,41 @@ public:
     }
 
     static void updateThirstDisplay(SOCKET sock, PlayerState& player) {
-        int thirst_val = (int)player.thirst;
-        std::string json_text = "{\"text\":\"[ Thirst: " + std::to_string(thirst_val) + "% ]\",\"color\":\"aqua\"}";
+        std::string json_text = "{\"text\":\"Thirst\",\"color\":\"aqua\",\"bold\":true}";
         
-        std::string payload = "";
-        appendVarInt(payload, json_text.length());
-        payload.append(json_text);
-        payload.push_back(0x02);
+        std::string uuid = "\x12\x34\x56\x78\x90\xab\xcd\xef\x12\x34\x56\x78\x90\xab\xcd\xef";
+        float health_ratio = std::clamp(player.thirst / 100.0f, 0.0f, 1.0f);
 
-        sendPacketRaw(sock, 0x0F, payload);
+        if (!player.boss_bar_initialized) {
+            std::string payload = "";
+            payload.append(uuid);
+            appendVarInt(payload, 0);
+
+            appendVarInt(payload, json_text.length());
+            payload.append(json_text);
+
+            appendFloat(payload, health_ratio);
+
+            appendVarInt(payload, 1);
+            appendVarInt(payload, 0);
+            payload.push_back(0);
+
+            sendPacketRaw(sock, 0x0C, payload);
+            player.boss_bar_initialized = true;
+        } else {
+            std::string payload_health = "";
+            payload_health.append(uuid);
+            appendVarInt(payload_health, 2);
+            appendFloat(payload_health, health_ratio);
+            sendPacketRaw(sock, 0x0C, payload_health);
+
+            std::string payload_title = "";
+            payload_title.append(uuid);
+            appendVarInt(payload_title, 3);
+            appendVarInt(payload_title, json_text.length());
+            payload_title.append(json_text);
+            sendPacketRaw(sock, 0x0C, payload_title);
+        }
     }
 
     static void processMovement(SOCKET sock, PlayerState& player, double newX, double newY, double newZ, bool onGround) {

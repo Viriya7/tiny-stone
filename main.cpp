@@ -111,23 +111,6 @@ bool loadPlayerData(const std::string& username, PlayerState& player) {
     return false;
 }
 
-bool loadPlayerData(const std::string& username, PlayerState& player) {
-    std::string filepath = "./player_data/" + username + ".dat";
-    if (fs::exists(filepath)) {
-        std::ifstream file(filepath, std::ios::binary);
-        if (file) {
-            file.read(reinterpret_cast<char*>(&player.x), sizeof(player.x));
-            file.read(reinterpret_cast<char*>(&player.y), sizeof(player.y));
-            file.read(reinterpret_cast<char*>(&player.z), sizeof(player.z));
-            file.read(reinterpret_cast<char*>(&player.health), sizeof(player.health));
-            file.read(reinterpret_cast<char*>(&player.food_level), sizeof(player.food_level));
-            player.highest_y = player.y;
-            return true;
-        }
-    }
-    return false;
-}
-
 struct ClientSession {
     SOCKET socket;
     int connection_state;
