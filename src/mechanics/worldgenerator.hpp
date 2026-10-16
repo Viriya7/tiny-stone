@@ -93,42 +93,62 @@ public:
         std::string chunk_data_buffer = "";
 
         for (int sec = 0; sec < 8; sec++) {
-            chunk_data_buffer.push_back(4);
-
-            appendVarInt(chunk_data_buffer, 3);
-            appendVarInt(chunk_data_buffer, 0);
-            appendVarInt(chunk_data_buffer, 16);
-            appendVarInt(chunk_data_buffer, 112);
-
-            appendVarInt(chunk_data_buffer, 256);
-
-            uint8_t block_indices[4096];
+            int32_t raw_blocks[4096];
             int idx = 0;
-
             for (int y = 0; y < 16; y++) {
                 for (int z = 0; z < 16; z++) {
                     for (int x = 0; x < 16; x++) {
                         int globalX = (chunkX * 16) + x;
                         int globalY = (sec * 16) + y;
                         int globalZ = (chunkZ * 16) + z;
-
-                        int32_t current_block = getBlock(globalX, globalY, globalZ);
-                        
-                        uint8_t p_index = 0;
-                        if (current_block == 1) p_index = 1;
-                        else if (current_block == 7) p_index = 2;
-                        else p_index = 0;
-
-                        block_indices[idx++] = p_index;
+                        raw_blocks[idx++] = getBlock(globalX, globalY, globalZ);
                     }
                 }
             }
 
-            for (int l = 0; l < 256; l++) {
+            std::vector<int32_t> palette;
+            palette.push_back(0);
+            for (int i = 0; i < 4096; i++) {
+                int32_t b = raw_blocks[i];
+                if (std::find(palette.begin(), palette.end(), b) == palette.end()) {
+                    palette.push_back(b);
+                }
+            }
+
+            int bitsPerBlock = 4;
+            if (palette.size() > 16) bitsPerBlock = 5;
+            if (palette.size() > 32) bitsPerBlock = 6;
+            if (palette.size() > 64) bitsPerBlock = 7;
+            if (palette.size() > 128) bitsPerBlock = 8;
+            if (bitsPerBlock > 8) bitsPerBlock = 8;
+
+            chunk_data_buffer.push_back((uint8_t)bitsPerBlock);
+
+            appendVarInt(chunk_data_buffer, palette.size());
+            for (int32_t b : palette) {
+                appendVarInt(chunk_data_buffer, b << 4);
+            }
+
+            uint8_t block_indices[4096];
+            for (int i = 0; i < 4096; i++) {
+                int32_t b = raw_blocks[i];
+                auto it = std::find(palette.begin(), palette.end(), b);
+                block_indices[i] = (it != palette.end()) ? (uint8_t)std::distance(palette.begin(), it) : 0;
+            }
+
+            int itemsPerLong = 64 / bitsPerBlock;
+            int numLongs = (4096 + itemsPerLong - 1) / itemsPerLong;
+
+            appendVarInt(chunk_data_buffer, numLongs);
+
+            for (int l = 0; l < numLongs; l++) {
                 uint64_t long_val = 0;
-                for (int i = 0; i < 16; i++) {
-                    uint8_t val = block_indices[l * 16 + i] & 0x0F;
-                    long_val |= ((uint64_t)val << (i * 4));
+                for (int i = 0; i < itemsPerLong; i++) {
+                    int blockIdx = l * itemsPerLong + i;
+                    if (blockIdx < 4096) {
+                        uint64_t val = block_indices[blockIdx] & ((1ULL << bitsPerBlock) - 1);
+                        long_val |= (val << (i * bitsPerBlock));
+                    }
                 }
                 for (int i = 7; i >= 0; i--) {
                     chunk_data_buffer.push_back((long_val >> (i * 8)) & 0xFF);
@@ -148,7 +168,7 @@ public:
         appendVarInt(payload, chunk_data_buffer.length());
         payload.append(chunk_data_buffer);
 
-        appendVarInt(payload, 0); 
+        appendVarInt(payload, 0);
 
         return payload;
     }

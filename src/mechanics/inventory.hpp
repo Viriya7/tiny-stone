@@ -7,7 +7,7 @@ struct ItemStack {
     bool present = false;
     int16_t item_id = 0;
     uint8_t count = 0;
-    int16_t damage = 0;
+    int16_t metadata = 0;
 };
 
 class PlayerInventory {
